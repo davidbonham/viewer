@@ -16,14 +16,14 @@ class Viewer():
         self.screen_w = master.winfo_screenwidth()
         self.screen_h = master.winfo_screenheight()
 
-        #Remove window manager decoration and processing of 'X' button 
+        #Remove window manager decoration and processing of 'X' button
         #closing processing &c
         #root.overrideredirect(1)
 
         master.geometry("%dx%d+0+0" % (self.screen_w, self.screen_h))
         master.title('Image Viewer')
         master.configure(bg='#202020')
-        master.focus_set()    
+        master.focus_set()
         self.multibind(master, ["<Escape>", 'q', 'Q'], self.on_escape)
         self.multibind(master, ["<Left>", 'p', 'P'], self.on_left)
         self.multibind(master, ['<Right>', 'n', 'N'], self.on_right)
@@ -87,7 +87,7 @@ class Viewer():
 
         pil_image = pil_image.resize(new_size) #, Image.ANTIALIAS)
 
-        # We need to keep a reference to the photo image alive to 
+        # We need to keep a reference to the photo image alive to
         # prevent it being garbage collected
         self.current_image = ImageTk.PhotoImage(pil_image)
         self.image_widget.configure(image=self.current_image)
@@ -97,7 +97,7 @@ class Viewer():
     def updater(self):
         '''Called regularly to see if new images have appeared on disk'''
 
-        # All of the files in the hot directory that end in .jpg 
+        # All of the files in the hot directory that end in .jpg
         paths = [os.path.join(sys.argv[1], file) for file in os.listdir(sys.argv[1]) if file.lower().endswith('.jpg')]
 
         # Images that have appeared since we last looked
@@ -113,11 +113,11 @@ class Viewer():
             self.load_image()
 
         '''We want to be called again'''
-        self.after(250, self.updater)
+        self.master.after(250, self.updater)
 
 import sys
 
-if __name__ == '__main__':    
+if __name__ == '__main__':
 
     tk = tkinter.Tk()
     app = Viewer(master=tk)
