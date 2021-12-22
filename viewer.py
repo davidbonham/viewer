@@ -1,4 +1,5 @@
-import argparse 
+import argparse
+import fractions
 import os
 import statistics
 import sys
@@ -28,13 +29,13 @@ class Viewer():
         self.show_histogram = False  # Don't display the histogram yet
         self.bell = bell             # Don't ring the bell when new images appear
 
-        #Remove window manager decoration and processing of 'X' button 
+        #Remove window manager decoration and processing of 'X' button
         #closing processing &c
         if bare:
             self.master.attributes('-fullscreen', True)
             #self.master.overrideredirect(1)
 
- 
+
         # Set ourselves up as a full screen window unless the caller
         # overrides
         self.screen_w = width if width else master.winfo_screenwidth()
@@ -44,7 +45,7 @@ class Viewer():
         master.title('Image Viewer')
         master.configure(bg='#202020')
 
-        master.focus_set()    
+        master.focus_set()
         self.multibind(master, ["<Escape>", 'q', 'Q'], self.on_escape)
         self.multibind(master, ["<Left>", 'p', 'P'], self.on_left)
         self.multibind(master, ['<Right>', 'n', 'N'], self.on_right)
@@ -68,7 +69,7 @@ class Viewer():
         self.image_index = index % len(self.images)
         self.load_image()
 
-    def on_escape(self, event): 
+    def on_escape(self, event):
         '''Quit the application'''
         debug('escape')
         event.widget.withdraw()
@@ -181,9 +182,11 @@ class Viewer():
         if 'Exposure Time' in result:
             rational = result['Exposure Time']
             if rational < 1:
-                result['Exposure Time'] = f'{rational.numerator}/{rational.denominator} sec' 
+                # Not necessarily in lowest terms
+                fraction = fractions.Fraction(rational.numerator, rational.denominator)
+                result['Exposure Time'] = f'{fraction.numerator}/{fraction.denominator} sec'
             else:
-                result['Exposure Time'] = f'{rational} sec'  
+                result['Exposure Time'] = f'{rational} sec'
 
         if 'EV' in result:
             rational = result['EV']
@@ -197,10 +200,12 @@ class Viewer():
 
         if 'Focal Length' in result:
             result['Focal Length'] = f'{result["Focal Length"]}mm'
-        
+
         if 'Aperture' in result:
-            result['Aperture'] = f'f/{result["Aperture"]}'
-        
+            aperture = f'f/{result["Aperture"]}'
+            if aperture.endswith('.0'): aperture = aperture[:-2]
+            result['Aperture'] = aperture
+
         if 'ISO' in result:
             result['ISO'] = f'{result["ISO"]}'
 
@@ -215,18 +220,18 @@ class Viewer():
                 6 : 'Partial',
                 255 : 'other',
             }[result['Metering Mode']]
-        
+
         if 'Program' in result:
             result['Program'] = {
             0 : 'Not defined',
                 1 : 'Manual',
-                2 : 'Normal program',
-                3 : 'Aperture priority',
-                4 : 'Shutter priority',
-                5 : 'Creative program',
-                6 : 'Action program',
-                7 : 'Portrait mode',
-                8 : 'Landscape mode'
+                2 : 'Normal',
+                3 : 'Aperture',
+                4 : 'Shutter',
+                5 : 'Creative',
+                6 : 'Action',
+                7 : 'Portrait',
+                8 : 'Landscape'
 
             }[result['Program']]
 
@@ -253,7 +258,7 @@ class Viewer():
         MAXH = 256 // 3
         origin_x = self.screen_w - 10 - 256
         origin_y = 0 + 10 + MAXH
-        
+
         # Allow for some smoothing of data by averaging adjacent samples
         if BINWIDTH > 1:
             # We need to reduce the histogram size
@@ -263,10 +268,10 @@ class Viewer():
                 for bin in bins:
                     histogram[bin] = bin_mean
 
-        # Stop a few huge intensities dwarfing the others by clipping 
-        # at an intensity that exceeds 97.5% of the histogram values.  
+        # Stop a few huge intensities dwarfing the others by clipping
+        # at an intensity that exceeds 97.5% of the histogram values.
         # If the image is practially all black, the last quantile may
-        # be very small or even zero - use 10 as a minimum.  
+        # be very small or even zero - use 10 as a minimum.
         clip = max(10, statistics.quantiles(histogram, n=25)[-1])
 
         # We need to scale the brightness into the range 0..MAXH
@@ -276,11 +281,11 @@ class Viewer():
 
         # Delete the old histogram if there was one
         self.image_widget.delete('exposure')
-            
-        # Draw the new one and keep track of the canvas display file ids    
+
+        # Draw the new one and keep track of the canvas display file ids
         self.image_widget.create_rectangle(origin_x, origin_y, origin_x+256, origin_y-MAXH, fill='#202020', outline='', tags='exposure')
         self.image_widget.create_polygon((origin_x, origin_y), *polygon, (origin_x+255, origin_y), fill='white', tags='exposure')
-        
+
         # Now add EXIF info if there is any
         exif_info = self.get_exif_info(pil_image)
         if len(exif_info) > 0:
@@ -293,10 +298,12 @@ class Viewer():
             if 'Lens' in exif_info:
                 text += exif_info['Lens'] + '\n'
                 del exif_info['Lens']
+            if 'Aperture' in exif_info and 'Exposure Time' in exif_info and 'ISO' in exif_info:
+                text += f'{exif_info["Exposure Time"]} at {exif_info["Aperture"]}, ISO {exif_info["ISO"]}\n'
             text += '\n'
 
             # The width of the longest remianing label so we can pad them
-            # to this width 
+            # to this width
             max_label_width = max(len(label) for label in exif_info) + 1
             text += '\n'.join([f'{label+":":{max_label_width}} {value}' for label, value in exif_info.items()])
             text_id = self.image_widget.create_text(origin_x+256, origin_y+20, text=text, fill='white', anchor='ne', font=('Consolas', 10), tags='exposure')
@@ -344,7 +351,7 @@ class Viewer():
 
         pil_image = pil_image.resize(new_size)
 
-        # We need to keep a reference to the photo image alive to 
+        # We need to keep a reference to the photo image alive to
         # prevent it being garbage collected
         self.current_image = ImageTk.PhotoImage(pil_image)
         if self.canvas_image == None:
@@ -367,7 +374,7 @@ class Viewer():
             self.image_index = None
             self.rescan = False
 
-        # All of the files in the hot directory that end in .jpg 
+        # All of the files in the hot directory that end in .jpg
         paths = [os.path.join(sys.argv[1], file) for file in os.listdir(sys.argv[1]) if file.lower().endswith('.jpg')]
 
         # Images that have appeared since we last looked
@@ -400,7 +407,7 @@ class Viewer():
 
 import sys
 
-if __name__ == '__main__':    
+if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--width', type=int, help='Width of app window')
