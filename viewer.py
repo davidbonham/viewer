@@ -38,9 +38,9 @@ class Viewer():
 
         # Set ourselves up as a full screen window unless the caller
         # overrides
-        self.screen_w = width if width else master.winfo_screenwidth()
-        self.screen_h = height if height else master.winfo_screenheight()
-        master.geometry("%dx%d+0+0" % (self.screen_w, self.screen_h))
+        self.main_w = width if width else master.winfo_screenwidth()
+        self.main_h = height if height else master.winfo_screenheight()
+        master.geometry("%dx%d+0+0" % (self.main_w, self.main_h))
 
         master.title('Image Viewer')
         master.configure(bg='#202020')
@@ -57,7 +57,7 @@ class Viewer():
         master.bind('e', self.on_histogram)
 
         # We'll display our image in a label widget with no border
-        self.image_widget = tkinter.Canvas(master, width=self.screen_w, height=self.screen_h)
+        self.image_widget = tkinter.Canvas(master, width=self.main_w, height=self.main_h)
         self.image_widget.pack()
         self.image_widget.configure(bd=0, background='#808080')
         self.canvas_image = None
@@ -131,6 +131,11 @@ class Viewer():
             self.goto_image(self.image_index)
 
     def get_exif_info(self, pil_image):
+        '''
+        Return a dictionary containing all the interesting information
+        where the keys are the user-friendly labels. If there is no
+        EXIF info of interest, the dictionary will be empty.
+        '''
 
         # This provides baseline information only
         exif_data = pil_image.getexif()
@@ -150,14 +155,10 @@ class Viewer():
             'ExposureProgram': 'Program',
             'ISOSpeedRatings': 'ISO',
             'ExposureMode': 'Exposure Mode',
-            #'WhiteBalance',
-            #'RecommendedExposureIndex',
-            #'LensSpecification',
             'LensModel': 'Lens'
 
         }
         wanted_tags = {key: public_name[name] for key, name in ExifTags.TAGS.items() if name in (
-            #'ApertureValue',
             'ExposureBiasValue',
             'ExposureTime',
             'MeteringMode',
@@ -166,9 +167,6 @@ class Viewer():
             'ExposureProgram',
             'ISOSpeedRatings',
             'ExposureMode',
-            #'WhiteBalance',
-            #'RecommendedExposureIndex',
-            #'LensSpecification',
             'LensModel',
         )}
 
@@ -190,9 +188,10 @@ class Viewer():
 
         if 'EV' in result:
             rational = result['EV']
+            sign = '+' if rational >= 0 else '-'
+            if sign == '-': rational = -rational
             whole = int(rational)
             fraction = rational - whole
-            sign = '+' if rational >= 0 else '-'
             if fraction.numerator != 0:
                 result['EV'] = f'{sign}{whole if whole != 0 else ""} {fraction.numerator}/{fraction.denominator}'
             else:
@@ -219,7 +218,7 @@ class Viewer():
                 5 : 'Pattern',
                 6 : 'Partial',
                 255 : 'other',
-            }[result['Metering Mode']]
+            }.get(result['Metering Mode'], 'Undefined')
 
         if 'Program' in result:
             result['Program'] = {
@@ -233,14 +232,14 @@ class Viewer():
                 7 : 'Portrait',
                 8 : 'Landscape'
 
-            }[result['Program']]
+            }.get(result['Program'], 'Undefined')
 
         if 'Exposure Mode' in result:
             result['Exposure Mode'] = {
                 0 : 'Auto',
                 1 : 'Manual',
                 2 : 'Auto bracket'
-            }[result['Exposure Mode']]
+            }.get(result['Exposure Mode'], 'Undefined')
         return result
 
 
@@ -254,10 +253,12 @@ class Viewer():
         # Fix the histogram size at 256 pixels wide (one per luminosity value)
         # and a third as high. and position it at the top right of the canvas
         # with a margin of 10 pixels above and to the right.
+        NUMLEVELS = 256
         BINWIDTH = 1
-        MAXH = 256 // 3
-        origin_x = self.screen_w - 10 - 256
-        origin_y = 0 + 10 + MAXH
+        MAXH = 256 // 2
+        MARGIN = 10
+        origin_x = self.main_w - MARGIN - NUMLEVELS
+        origin_y = 0 + MARGIN + MAXH
 
         # Allow for some smoothing of data by averaging adjacent samples
         if BINWIDTH > 1:
@@ -277,14 +278,14 @@ class Viewer():
         # We need to scale the brightness into the range 0..MAXH
         debug(f'histogram clip={clip} total={sum(histogram)}')
         scale = MAXH / clip
-        polygon = [(origin_x + x, origin_y - scale*min(clip,histogram[x])) for x in range(256)]
+        polygon = [(origin_x + x, origin_y - scale*min(clip,histogram[x])) for x in range(NUMLEVELS)]
 
         # Delete the old histogram if there was one
         self.image_widget.delete('exposure')
 
         # Draw the new one and keep track of the canvas display file ids
-        self.image_widget.create_rectangle(origin_x, origin_y, origin_x+256, origin_y-MAXH, fill='#202020', outline='', tags='exposure')
-        self.image_widget.create_polygon((origin_x, origin_y), *polygon, (origin_x+255, origin_y), fill='white', tags='exposure')
+        self.image_widget.create_rectangle(origin_x, origin_y, origin_x+NUMLEVELS, origin_y-MAXH, fill='#202020', outline='', tags='exposure')
+        self.image_widget.create_polygon((origin_x, origin_y), *polygon, (origin_x+NUMLEVELS, origin_y), fill='white', tags='exposure')
 
         # Now add EXIF info if there is any
         exif_info = self.get_exif_info(pil_image)
@@ -334,18 +335,13 @@ class Viewer():
             self.on_right(None)
             return
 
-        exif_info = self.get_exif_info(pil_image)
-        for name, value in exif_info.items():
-            print(f'{name}: {value}')
-
-
         imgWidth, imgHeight = pil_image.size
         self.master.title(f'Image Viewer - {imgWidth}x{imgHeight} - {path}')
 
         # Scale the image to fit the screen - the dimension that
         # needs scaling most gives us the scale factor to use.
-        w_scale = imgWidth / self.screen_w
-        h_scale = imgHeight / self.screen_h
+        w_scale = imgWidth / self.main_w
+        h_scale = imgHeight / self.main_h
         scale = max(w_scale, h_scale)
         new_size = (int(imgWidth/scale), int(imgHeight/scale))
 
