@@ -7,6 +7,8 @@ import tkinter
 import PIL
 from PIL import Image, ImageTk, ExifTags, TiffTags
 
+BGCOLOUR='#404040'
+
 debugging = False
 def debug(record):
     if debugging:
@@ -19,6 +21,8 @@ class Viewer():
 
         self.image_index = None      # Index of the current image
         self.images = []             # The paths of images we know about
+        self.skiplist = []           # Corrupt or missing images
+
         self.master = master
         self.rescan = False          # Updater is to start from scratch
 
@@ -28,6 +32,7 @@ class Viewer():
 
         self.show_histogram = False  # Don't display the histogram yet
         self.bell = bell             # Don't ring the bell when new images appear
+        self.centre_image = False    # Don't centre the image
 
         #Remove window manager decoration and processing of 'X' button
         #closing processing &c
@@ -43,7 +48,7 @@ class Viewer():
         master.geometry("%dx%d+0+0" % (self.main_w, self.main_h))
 
         master.title('Image Viewer')
-        master.configure(bg='#202020')
+        master.configure(bg=BGCOLOUR)
 
         master.focus_set()
         self.multibind(master, ["<Escape>", 'q', 'Q'], self.on_escape)
@@ -54,12 +59,13 @@ class Viewer():
         master.bind('<space>', self.on_space)
         master.bind('+', self.on_plus)
         master.bind('-', self.on_minus)
+        master.bind('c', self.on_centre)
         master.bind('e', self.on_histogram)
-
+        master.bind('x', self.on_clearskip)
         # We'll display our image in a label widget with no border
         self.image_widget = tkinter.Canvas(master, width=self.main_w, height=self.main_h)
         self.image_widget.pack()
-        self.image_widget.configure(bd=0, background='#808080')
+        self.image_widget.configure(bd=0, background=BGCOLOUR)
         self.canvas_image = None
         debug('Viewer constructed')
 
@@ -67,6 +73,21 @@ class Viewer():
     def goto_image(self, index):
         '''Go to the image in the list, wrapping at the ends'''
         self.image_index = index % len(self.images)
+        self.load_image()
+
+    def on_clearskip(self, _):
+        '''
+        The next scan will reinspect files no longer on the skip list
+        '''
+        debug('on_clearskip')
+        self.skiplist = []
+
+    def on_centre(self, _):
+        '''
+        Toggle centring of images
+        '''
+        debug('on_centre')
+        self.centre_image = not self.centre_image
         self.load_image()
 
     def on_escape(self, event):
@@ -313,7 +334,7 @@ class Viewer():
             # colour as the text, we'll get the extent of the text and draw
             # a grey rectangle behind it
             extent = self.image_widget.bbox(text_id)
-            rect_id = self.image_widget.create_rectangle(*extent, fill='#808080', outline='#808080', tags='exposure')
+            rect_id = self.image_widget.create_rectangle(*extent, fill=BGCOLOUR, outline=BGCOLOUR, tags='exposure')
             self.image_widget.tag_raise(text_id, rect_id)
 
 
@@ -325,15 +346,20 @@ class Viewer():
         path = self.images[self.image_index]
         try:
             pil_image = Image.open(path, 'r')
-        except (PIL.UnidentifiedImageError, FileNotFoundError) as e:
-            if isinstance(e, FileNotFoundError):
-                print(f'image {path} missing - rescanning directory', file=sys.stderr)
-                self.rescan = True
-            else:
-                print(f'unable to load image {path} - skipping', file=sys.stderr)
+            pil_image.load()
+        except (PIL.UnidentifiedImageError, FileNotFoundError, OSError) as e:
+            #if isinstance(e, FileNotFoundError):
+                #print(f'image {path} missing - rescanning directory', file=sys.stderr)
+                #self.rescan = True
+            #else:
+            #    print(f'unable to load image {path} - skipping', file=sys.stderr)
+            print(f'warning: skipping {path} - {e}', file=sys.stderr)
+            self.skiplist.append(path)
+            del self.images[self.image_index]
 
-            self.on_right(None)
+            self.load_image()
             return
+
 
         imgWidth, imgHeight = pil_image.size
         self.master.title(f'Image Viewer - {imgWidth}x{imgHeight} - {path}')
@@ -345,15 +371,20 @@ class Viewer():
         scale = max(w_scale, h_scale)
         new_size = (int(imgWidth/scale), int(imgHeight/scale))
 
+        # This is the first operation on the file and so the point at which
+        # a corrupt image will be detected
         pil_image = pil_image.resize(new_size)
 
         # We need to keep a reference to the photo image alive to
         # prevent it being garbage collected
         self.current_image = ImageTk.PhotoImage(pil_image)
-        if self.canvas_image == None:
-            self.canvas_image = self.image_widget.create_image(0, 0, anchor='nw', image=self.current_image)
+        if self.canvas_image != None:
+            self.image_widget.delete(self.canvas_image)
+        if self.centre_image:
+            self.canvas_image = self.image_widget.create_image(self.main_w/2, self.main_h/2, anchor='center', image=self.current_image)
         else:
-            self.canvas_image = self.image_widget.itemconfig(self.canvas_image, image=self.current_image)
+            self.canvas_image = self.image_widget.create_image(0, 0, anchor='nw', image=self.current_image)
+
         debug(f'loaded {self.image_index}={self.images[self.image_index]}')
 
         if self.show_histogram:
@@ -373,8 +404,9 @@ class Viewer():
         # All of the files in the hot directory that end in .jpg
         paths = [os.path.join(sys.argv[1], file) for file in os.listdir(sys.argv[1]) if file.lower().endswith('.jpg')]
 
-        # Images that have appeared since we last looked
-        new_images = [path for path in paths if path not in self.images and os.path.isfile(path)]
+        # Images that have appeared since we last looked, ignoring the corrupt
+        # ones we already know about
+        new_images = [path for path in paths if path not in self.images and path not in self.skiplist and os.path.isfile(path)]
 
         if new_images != []:
 
