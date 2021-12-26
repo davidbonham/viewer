@@ -71,9 +71,13 @@ class Viewer():
 
 
     def goto_image(self, index):
-        '''Go to the image in the list, wrapping at the ends'''
-        self.image_index = index % len(self.images)
-        self.load_image()
+        '''
+        Go to the image in the list, wrapping at the ends. If there are no
+        images, do nothing
+        '''
+        if index != None:
+            self.image_index = index % len(self.images)
+            self.load_image()
 
     def on_clearskip(self, _):
         '''
@@ -160,7 +164,7 @@ class Viewer():
 
         # This provides baseline information only
         exif_data = pil_image.getexif()
-        result = {ExifTags.TAGS[key]: value for key, value in exif_data.items() if ExifTags.TAGS[key] in ('Model',)}
+        result = {ExifTags.TAGS[key]: value for key, value in exif_data.items() if key in ExifTags.TAGS and ExifTags.TAGS[key] in ('Model',)}
 
         # The interesting stuff is in the Private TIFF tag IFD with the tag ExifIFD=0x8769
         ifd_data = exif_data.get_ifd(0x8769)
