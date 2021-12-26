@@ -17,7 +17,7 @@ def debug(record):
 
 class Viewer():
 
-    def __init__(self, master, width=None, height=None, bare=False, bell=False):
+    def __init__(self, master, width=None, height=None, bare=False, bell=False, sort=False):
 
         self.image_index = None      # Index of the current image
         self.images = []             # The paths of images we know about
@@ -33,6 +33,7 @@ class Viewer():
         self.show_histogram = False  # Don't display the histogram yet
         self.bell = bell             # Don't ring the bell when new images appear
         self.centre_image = False    # Don't centre the image
+        self.sort_on_load = sort     # Sort images on loading
 
         #Remove window manager decoration and processing of 'X' button
         #closing processing &c
@@ -406,7 +407,7 @@ class Viewer():
             self.rescan = False
 
         # All of the files in the hot directory that end in .jpg
-        paths = [os.path.join(sys.argv[1], file) for file in os.listdir(sys.argv[1]) if file.lower().endswith('.jpg')]
+        paths = [os.path.join(sys.argv[1], file) for file in os.listdir(sys.argv[1]) if file.lower().endswith('.jpg') or file.lower().endswith('.jpeg')]
 
         # Images that have appeared since we last looked, ignoring the corrupt
         # ones we already know about
@@ -417,8 +418,11 @@ class Viewer():
             # There are new images so whereever we were, move
             # to the first new image and display it
             debug(f'saw {new_images}')
+
             self.image_index = len(self.images)
             self.images.extend(new_images)
+            if self.sort_on_load:
+                self.images.sort()
             self.load_image()
 
             # Reset the slideshow
@@ -446,13 +450,14 @@ if __name__ == '__main__':
     parser.add_argument('--height', type=int, help='Height of app window')
     parser.add_argument('--bare', action='store_true', help='Disable window manager decoration')
     parser.add_argument('--bell', action='store_true', help='Ring the bell when new images appear')
+    parser.add_argument('--sort', action='store_true', help='Sort images into alphabetical order')
     parser.add_argument('--debug', action='store_true', help='Print debug info to standard output')
     parser.add_argument('directory', help='Path to hot folder')
     args = parser.parse_args()
 
     debugging = args.debug
     tk = tkinter.Tk()
-    app = Viewer(master=tk, width=args.width, height=args.height, bare=args.bare, bell=args.bell)
+    app = Viewer(master=tk, width=args.width, height=args.height, bare=args.bare, bell=args.bell, sort=args.sort)
     tk.after(10, app.updater)
     tk.mainloop()
 
