@@ -17,7 +17,7 @@ def debug(record):
 
 class Viewer():
 
-    def __init__(self, master, width=None, height=None, bare=False, bell=False, sort=False):
+    def __init__(self, master, width=None, height=None, bare=False, bell=False, sort=False, path=None):
 
         self.image_index = None      # Index of the current image
         self.images = []             # The paths of images we know about
@@ -34,6 +34,7 @@ class Viewer():
         self.bell = bell             # Don't ring the bell when new images appear
         self.centre_image = False    # Don't centre the image
         self.sort_on_load = sort     # Sort images on loading
+        self.path = path
 
         #Remove window manager decoration and processing of 'X' button
         #closing processing &c
@@ -407,7 +408,7 @@ class Viewer():
             self.rescan = False
 
         # All of the files in the hot directory that end in .jpg
-        paths = [os.path.join(sys.argv[1], file) for file in os.listdir(sys.argv[1]) if file.lower().endswith('.jpg') or file.lower().endswith('.jpeg')]
+        paths = [os.path.join(self.path, file) for file in os.listdir(self.path) if file.lower().endswith('.jpg') or file.lower().endswith('.jpeg')]
 
         # Images that have appeared since we last looked, ignoring the corrupt
         # ones we already know about
@@ -457,7 +458,7 @@ if __name__ == '__main__':
 
     debugging = args.debug
     tk = tkinter.Tk()
-    app = Viewer(master=tk, width=args.width, height=args.height, bare=args.bare, bell=args.bell, sort=args.sort)
+    app = Viewer(master=tk, width=args.width, height=args.height, bare=args.bare, bell=args.bell, sort=args.sort, path=args.directory)
     tk.after(10, app.updater)
     tk.mainloop()
 
