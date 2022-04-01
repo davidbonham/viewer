@@ -74,3 +74,13 @@ Provide some helpful information about actions being processed.
 
 The script requires ``tkinter``, the python interface to Tcl/Tk and ``Pillow``,
 the fork of PIL, the python image library.
+
+> The Python Imaging Library (PIL) is
+>
+>    Copyright © 1997-2011 by Secret Labs AB
+>    Copyright © 1995-2011 by Fredrik Lundh
+>
+> Pillow is the friendly PIL fork. It is
+>
+>    Copyright © 2010-2022 by Alex Clark and contributors
+
