@@ -62,8 +62,8 @@ Key(s)          | Action
 \<home\>, h, H  | Display the first image
 \<end\>         | Display the last image
 \<space\>       | Toggle the slideshow performance on or off
-+               | Double the speed of the slideshow and advance 
--               | Halve the speed of the slideshow and advance
+\+              | Double the speed of the slideshow and advance 
+\-              | Halve the speed of the slideshow and advance
 c               | Toggle the centring of the image in the window
 e               | Toggle the display of selected EXIF information
 x               | Clear the list of images skipped because they appear corrupt
