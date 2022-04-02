@@ -61,11 +61,7 @@ Key(s)          | Action
 \<right\>, n, N | Display the next image, wrapping to the first
 \<home\>, h, H  | Display the first image
 \<end\>         | Display the last image
-<<<<<<< HEAD
 \<space\>       | Toggle the slideshow performance on or off
-=======
-\space\>        | Toggle the slideshow performance on or off
->>>>>>> f7eb6f67a8db7bb673a9b113e611a25d29721321
 +               | Double the speed of the slideshow and advance 
 -               | Halve the speed of the slideshow and advance
 c               | Toggle the centring of the image in the window
