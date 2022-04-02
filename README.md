@@ -54,20 +54,19 @@ Provide some helpful information about actions being processed.
 
 #### Key Bindings
 
-> <esc>, q, Q:   Quit the application and return to the command line  
->
-> <left>, p, P:  Display the previous image, wrapping to the last 
-> <right>, n, N: Display the next image, wrapping to the first
-> <home>, h, H:  Display the first image
-> <end>:         Display the last image
->
-> <space>:       Toggle the slideshow performance on or off
-> +:             Double the speed of the slideshow and advance 
-> -:             Halve the speed of the slideshow and advance
-> 
-> c:             Toggle the centring of the image in the window
-> e:             Toggle the display of selected EXIF information
-> x:             Clear the list of images skipped because they appear corrupt
+Key(s)          | Action
+--------------- | :-----
+\<esc\>, q, Q   | Quit the application and return to the command line  
+\<left\>, p, P  | Display the previous image, wrapping to the last 
+\<right\>, n, N | Display the next image, wrapping to the first
+\<home\>, h, H  | Display the first image
+\<end\>         | Display the last image
+\space\>        | Toggle the slideshow performance on or off
++               | Double the speed of the slideshow and advance 
+-               | Halve the speed of the slideshow and advance
+c               | Toggle the centring of the image in the window
+e               | Toggle the display of selected EXIF information
+x               | Clear the list of images skipped because they appear corrupt
 
 
 #### Dependencies
@@ -75,12 +74,12 @@ Provide some helpful information about actions being processed.
 The script requires ``tkinter``, the python interface to Tcl/Tk and ``Pillow``,
 the fork of PIL, the python image library.
 
-> The Python Imaging Library (PIL) is
->
->    Copyright © 1997-2011 by Secret Labs AB
->    Copyright © 1995-2011 by Fredrik Lundh
->
-> Pillow is the friendly PIL fork. It is
->
->    Copyright © 2010-2022 by Alex Clark and contributors
+The Python Imaging Library (PIL) is:
+
+    Copyright © 1997-2011 by Secret Labs AB
+    Copyright © 1995-2011 by Fredrik Lundh
+
+ Pillow is the friendly PIL fork. It is:
+
+    Copyright © 2010-2022 by Alex Clark and contributors
 
