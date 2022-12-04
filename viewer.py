@@ -1,20 +1,23 @@
 import argparse
+import csv
 import fractions
 import os
 import statistics
 import sys
 import tkinter
+from tkinter import font as tkFont
+import tkinter.simpledialog
+import PIL
+from PIL import Image, ImageTk, ExifTags
 
-#The Python Imaging Library (PIL) is
+# The Python Imaging Library (PIL) is
 #
 #    Copyright © 1997-2011 by Secret Labs AB
 #    Copyright © 1995-2011 by Fredrik Lundh
 #
-#Pillow is the friendly PIL fork. It is
+# Pillow is the friendly PIL fork. It is
 #
 #    Copyright © 2010-2022 by Alex Clark and contributors
-import PIL
-from PIL import Image, ImageTk, ExifTags, TiffTags
 
 BGCOLOUR='#404040'
 
@@ -44,6 +47,7 @@ class Viewer():
         self.centre_image = False    # Don't centre the image
         self.sort_on_load = sort     # Sort images on loading
         self.path = path
+        self.load_metadata()
 
         #Remove window manager decoration and processing of 'X' button
         #closing processing &c
@@ -72,14 +76,17 @@ class Viewer():
         master.bind('-', self.on_minus)
         master.bind('c', self.on_centre)
         master.bind('e', self.on_histogram)
+        master.bind('t', self.on_text)
         master.bind('x', self.on_clearskip)
+        for rating in range(10):
+            master.bind(str(rating), self.on_rating)
+
         # We'll display our image in a label widget with no border
         self.image_widget = tkinter.Canvas(master, width=self.main_w, height=self.main_h)
         self.image_widget.pack()
         self.image_widget.configure(bd=0, background=BGCOLOUR)
         self.canvas_image = None
         debug('Viewer constructed')
-
 
     def goto_image(self, index):
         '''
@@ -149,6 +156,40 @@ class Viewer():
         self.slideshow_ticks *= 2
         debug(f'minus {self.slideshow_ticks}')
 
+    def on_rating(self, info):
+        current_image_path = self.images[self.image_index]
+        if current_image_path not in self.metadata:
+            self.metadata[current_image_path] = {'notes': ''}
+        self.metadata[current_image_path]['rating'] = info.char
+
+        # If the EDIT data is visible, toggle to redraw it all
+        if self.show_histogram:
+            self.on_histogram(None)
+            self.on_histogram(None)
+
+        # And make sure all is safe
+        self.save_metadata()
+
+    def on_text(self, info):
+
+        # Get the current notes as the inital setting
+        current_image_path = self.images[self.image_index]
+        notes = self.metadata.get(current_image_path, {'notes': ''})['notes']
+        reply = tkinter.simpledialog.askstring('Notes', '', initialvalue=notes)
+
+        # If the user replied, update the notes
+        if reply:
+            if current_image_path not in self.metadata:
+                self.metadata[current_image_path] = {'rating': 0}
+            self.metadata[current_image_path]['notes'] = reply
+
+            # If the EDIT data is visible, toggle to redraw it all
+            if self.show_histogram:
+                self.on_histogram(None)
+                self.on_histogram(None)
+
+            # And make sure all is safe
+            self.save_metadata()
 
     def multibind(self, widget, events, handler):
         '''Bind the handler to each event in the list'''
@@ -276,10 +317,11 @@ class Viewer():
                 1 : 'Manual',
                 2 : 'Auto bracket'
             }.get(result['Exposure Mode'], 'Undefined')
+
         return result
 
 
-    def draw_histogram(self, pil_image):
+    def draw_histogram(self, pil_image, image_path):
         '''Given a PIL image, render the histogram for it'''
 
         # We need a greyscale version which has 256 values
@@ -323,8 +365,17 @@ class Viewer():
         self.image_widget.create_rectangle(origin_x, origin_y, origin_x+NUMLEVELS, origin_y-MAXH, fill='#202020', outline='', tags='exposure')
         self.image_widget.create_polygon((origin_x, origin_y), *polygon, (origin_x+NUMLEVELS, origin_y), fill='white', tags='exposure')
 
-        # Now add EXIF info if there is any
+        # Now add EXIF info if there is any. We cheat a bit here and add our own
+        # rating and notes as EXIF tags
         exif_info = self.get_exif_info(pil_image)
+        metadata = self.metadata.get(image_path, {'rating': 0, 'notes': ''})
+        rating = metadata['rating']
+        notes = metadata['notes']
+        if rating != 0:
+            exif_info['Rating'] = rating
+        if notes != '':
+            exif_info['Notes'] = notes
+
         if len(exif_info) > 0:
 
             # Treat some items specially - mainly to keep the width down
@@ -403,7 +454,7 @@ class Viewer():
         debug(f'loaded {self.image_index}={self.images[self.image_index]}')
 
         if self.show_histogram:
-            self.draw_histogram(pil_image)
+            self.draw_histogram(pil_image, path)
 
 
     def updater(self):
@@ -451,11 +502,62 @@ class Viewer():
         '''We want to be called again'''
         self.master.after(250, self.updater)
 
+    def load_metadata(self):
+        '''
+        The file 'metadata.csv' in the hot folder, if it exists, holds
+        records with the format
+
+        "filename", rating, "notes"
+
+        Read it into a dictonary mapping filename to rating and notes and
+        return it.
+        '''
+        self.metadata = {}
+        metadata_db = os.path.join(self.path, 'metadata.csv')
+        if os.path.isfile(metadata_db):
+            with open(metadata_db, 'r') as db:
+                rows = csv.reader(db)
+                for image, rating, notes in rows:
+                    self.metadata[image]= {'rating': rating, 'notes': notes}
+
+    def save_metadata(self):
+        '''
+        Save the updated ratings if there are any.
+        '''
+        if len(self.metadata) > 0:
+            metadata_db = os.path.join(self.path, 'metadata.csv')
+            with open(metadata_db, 'w') as db:
+                for image in self.metadata.keys():
+                    # We put the rating first in case the path contains spaces
+                    writer = csv.writer(db)
+                    writer.writerow([image, self.metadata[image]['rating'], self.metadata[image]['notes']])
+
 import sys
 
 if __name__ == '__main__':
 
-    parser = argparse.ArgumentParser()
+    epilog_text = '''
+
+navigation keys:
+  <Escape>, q, Q   Quit
+  <Left>, p, P     Go to previous image
+  <Right>, n, N    Go to next image
+  <Home>, h, H     Go to the first image in the folder
+  <End>, e, E      Go to the last image in the folder
+  <Space>          Toggle the slideshow
+  +                Double the speed of the slideshow
+  -                Halve the speed of the slideshow
+  c                Toggle centring of images
+  e                Toggle display of the histogram and EXIF info
+  x                Clear the list of images being skipped because we failed to load them
+  0,1,...9         Rate the current image
+'''
+
+    parser = argparse.ArgumentParser(
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description  = 'Display images as they appear in a hot folder',
+        epilog = epilog_text
+    )
     parser.add_argument('--width', type=int, help='Width of app window')
     parser.add_argument('--height', type=int, help='Height of app window')
     parser.add_argument('--bare', action='store_true', help='Disable window manager decoration')
