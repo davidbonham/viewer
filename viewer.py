@@ -2,6 +2,7 @@ import argparse
 import csv
 import fractions
 import os
+import random
 import statistics
 import sys
 import tkinter
@@ -29,7 +30,7 @@ def debug(record):
 
 class Viewer():
 
-    def __init__(self, master, width=None, height=None, bare=False, bell=False, sort=False, path=None):
+    def __init__(self, master, width=None, height=None, bare=False, bell=False, sort=False, randomise=False, path=None):
 
         self.image_index = None      # Index of the current image
         self.images = []             # The paths of images we know about
@@ -46,6 +47,7 @@ class Viewer():
         self.bell = bell             # Don't ring the bell when new images appear
         self.centre_image = False    # Don't centre the image
         self.sort_on_load = sort     # Sort images on loading
+        self.randomise_on_load = randomise     # Shuffle images on loading
         self.path = path
         self.load_metadata()
 
@@ -170,7 +172,7 @@ class Viewer():
         # And make sure all is safe
         self.save_metadata()
 
-    def on_text(self, info):
+    def on_text(self, _):
 
         # Get the current notes as the inital setting
         current_image_path = self.images[self.image_index]
@@ -180,7 +182,7 @@ class Viewer():
         # If the user replied, update the notes
         if reply:
             if current_image_path not in self.metadata:
-                self.metadata[current_image_path] = {'rating': 0}
+                self.metadata[current_image_path] = {'rating': '0'}
             self.metadata[current_image_path]['notes'] = reply
 
             # If the EDIT data is visible, toggle to redraw it all
@@ -368,10 +370,10 @@ class Viewer():
         # Now add EXIF info if there is any. We cheat a bit here and add our own
         # rating and notes as EXIF tags
         exif_info = self.get_exif_info(pil_image)
-        metadata = self.metadata.get(image_path, {'rating': 0, 'notes': ''})
+        metadata = self.metadata.get(image_path, {'rating': '0', 'notes': ''})
         rating = metadata['rating']
         notes = metadata['notes']
-        if rating != 0:
+        if rating != '0':
             exif_info['Rating'] = rating
         if notes != '':
             exif_info['Notes'] = notes
@@ -380,11 +382,14 @@ class Viewer():
 
             # Treat some items specially - mainly to keep the width down
             text = ''
+            longest = 0
             if 'Model' in exif_info:
                 text += exif_info['Model'] + '\n'
+                longest = max (longest, len(exif_info['Model']))
                 del exif_info['Model']
             if 'Lens' in exif_info:
                 text += exif_info['Lens'] + '\n'
+                longest = max(longest, len(exif_info['Lens']))
                 del exif_info['Lens']
             if 'Aperture' in exif_info and 'Exposure Time' in exif_info and 'ISO' in exif_info:
                 text += f'{exif_info["Exposure Time"]} at {exif_info["Aperture"]}, ISO {exif_info["ISO"]}\n'
@@ -392,7 +397,7 @@ class Viewer():
 
             # The width of the longest remianing label so we can pad them
             # to this width
-            max_label_width = max(len(label) for label in exif_info) + 1
+            max_label_width = max([len(label) for label in exif_info], default=longest) + 1
             text += '\n'.join([f'{label+":":{max_label_width}} {value}' for label, value in exif_info.items()])
             text_id = self.image_widget.create_text(origin_x+256, origin_y+20, text=text, fill='white', anchor='ne', font=('Consolas', 10), tags='exposure')
 
@@ -479,6 +484,7 @@ class Viewer():
             # There are new images so whereever we were, move
             # to the first new image and display it
             debug(f'saw {new_images}')
+            random.shuffle(new_images)
 
             self.image_index = len(self.images)
             self.images.extend(new_images)
@@ -517,6 +523,7 @@ class Viewer():
         if os.path.isfile(metadata_db):
             with open(metadata_db, 'r') as db:
                 rows = csv.reader(db)
+
                 for image, rating, notes in rows:
                     self.metadata[image]= {'rating': rating, 'notes': notes}
 
@@ -526,7 +533,7 @@ class Viewer():
         '''
         if len(self.metadata) > 0:
             metadata_db = os.path.join(self.path, 'metadata.csv')
-            with open(metadata_db, 'w') as db:
+            with open(metadata_db, 'w', newline='') as db:
                 for image in self.metadata.keys():
                     # We put the rating first in case the path contains spaces
                     writer = csv.writer(db)
@@ -564,12 +571,14 @@ navigation keys:
     parser.add_argument('--bell', action='store_true', help='Ring the bell when new images appear')
     parser.add_argument('--sort', action='store_true', help='Sort images into alphabetical order')
     parser.add_argument('--debug', action='store_true', help='Print debug info to standard output')
+    parser.add_argument('--randomise', action='store_true', help='Randomise the initial order')
+
     parser.add_argument('directory', help='Path to hot folder')
     args = parser.parse_args()
 
     debugging = args.debug
     tk = tkinter.Tk()
-    app = Viewer(master=tk, width=args.width, height=args.height, bare=args.bare, bell=args.bell, sort=args.sort, path=args.directory)
+    app = Viewer(master=tk, width=args.width, height=args.height, bare=args.bare, bell=args.bell, sort=args.sort, randomise=args.randomise, path=args.directory)
     tk.after(10, app.updater)
     tk.mainloop()
 
