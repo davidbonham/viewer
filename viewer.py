@@ -30,7 +30,7 @@ def debug(record):
 
 class Viewer():
 
-    def __init__(self, master, width=None, height=None, bare=False, bell=False, sort=False, randomise=False, path=None):
+    def __init__(self, master, width=None, height=None, bare=False, bell=False, sort=False, randomise=False, filter=None, path=None):
 
         self.image_index = None      # Index of the current image
         self.images = []             # The paths of images we know about
@@ -50,6 +50,9 @@ class Viewer():
         self.randomise_on_load = randomise     # Shuffle images on loading
         self.path = path
         self.load_metadata()
+        self.filter = filter
+
+
 
         #Remove window manager decoration and processing of 'X' button
         #closing processing &c
@@ -82,6 +85,9 @@ class Viewer():
         master.bind('x', self.on_clearskip)
         for rating in range(10):
             master.bind(str(rating), self.on_rating)
+        for filter in '!".$%^&*()':
+            master.bind(filter, self.on_filter)
+
 
         # We'll display our image in a label widget with no border
         self.image_widget = tkinter.Canvas(master, width=self.main_w, height=self.main_h)
@@ -95,8 +101,19 @@ class Viewer():
         Go to the image in the list, wrapping at the ends. If there are no
         images, do nothing
         '''
+
         if index != None:
             self.image_index = index % len(self.images)
+
+            if self.filter:
+                for _ in range(len(self.images)):
+                    in_metadata = self.images[self.image_index] in self.metadata
+                    rating = '0' if not in_metadata else self.metadata[self.images[self.image_index]]['rating']
+                    if rating >= self.filter:
+                        break
+                    print(f'skip image {self.image_index} in metadata {in_metadata} rating {rating}')
+                    self.image_index = (self.image_index+1) % len(self.images)
+
             self.load_image()
 
     def on_clearskip(self, _):
@@ -171,6 +188,11 @@ class Viewer():
 
         # And make sure all is safe
         self.save_metadata()
+
+    def on_filter(self, info):
+        self.filter = chr(ord('0') + ')!".$%^&*('.find(info.char))
+        debug(f'on_rating \'{info.char}\' sets rating filter \'{self.filter}\'')
+
 
     def on_text(self, _):
 
@@ -377,6 +399,7 @@ class Viewer():
             exif_info['Rating'] = rating
         if notes != '':
             exif_info['Notes'] = notes
+        exif_info['Name'] = os.path.basename(image_path)
 
         if len(exif_info) > 0:
 
@@ -395,7 +418,7 @@ class Viewer():
                 text += f'{exif_info["Exposure Time"]} at {exif_info["Aperture"]}, ISO {exif_info["ISO"]}\n'
             text += '\n'
 
-            # The width of the longest remianing label so we can pad them
+            # The width of the longest remaining label so we can pad them
             # to this width
             max_label_width = max([len(label) for label in exif_info], default=longest) + 1
             text += '\n'.join([f'{label+":":{max_label_width}} {value}' for label, value in exif_info.items()])
@@ -572,13 +595,14 @@ navigation keys:
     parser.add_argument('--sort', action='store_true', help='Sort images into alphabetical order')
     parser.add_argument('--debug', action='store_true', help='Print debug info to standard output')
     parser.add_argument('--randomise', action='store_true', help='Randomise the initial order')
+    parser.add_argument('--filter', type=str, help='Set the minimum rating to display')
 
     parser.add_argument('directory', help='Path to hot folder')
     args = parser.parse_args()
 
     debugging = args.debug
     tk = tkinter.Tk()
-    app = Viewer(master=tk, width=args.width, height=args.height, bare=args.bare, bell=args.bell, sort=args.sort, randomise=args.randomise, path=args.directory)
+    app = Viewer(master=tk, width=args.width, height=args.height, bare=args.bare, bell=args.bell, sort=args.sort, randomise=args.randomise, filter=args.filter,path=args.directory)
     tk.after(10, app.updater)
     tk.mainloop()
 
