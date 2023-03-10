@@ -107,8 +107,9 @@ class Viewer():
 
             if self.filter:
                 for _ in range(len(self.images)):
-                    in_metadata = self.images[self.image_index] in self.metadata
-                    rating = '0' if not in_metadata else self.metadata[self.images[self.image_index]]['rating']
+                    image_name = os.path.basename(self.images[self.image_index])
+                    in_metadata = image_name in self.metadata
+                    rating = '0' if not in_metadata else self.metadata[image_name]['rating']
                     if rating >= self.filter:
                         break
                     print(f'skip image {self.image_index} in metadata {in_metadata} rating {rating}')
@@ -176,10 +177,10 @@ class Viewer():
         debug(f'minus {self.slideshow_ticks}')
 
     def on_rating(self, info):
-        current_image_path = self.images[self.image_index]
-        if current_image_path not in self.metadata:
-            self.metadata[current_image_path] = {'notes': ''}
-        self.metadata[current_image_path]['rating'] = info.char
+        current_image_name = os.path.basename(self.images[self.image_index])
+        if current_image_name not in self.metadata:
+            self.metadata[current_image_name] = {'notes': ''}
+        self.metadata[current_image_name]['rating'] = info.char
 
         # If the EDIT data is visible, toggle to redraw it all
         if self.show_histogram:
@@ -197,15 +198,15 @@ class Viewer():
     def on_text(self, _):
 
         # Get the current notes as the inital setting
-        current_image_path = self.images[self.image_index]
-        notes = self.metadata.get(current_image_path, {'notes': ''})['notes']
+        current_image_name = os.path.basename(self.images[self.image_index])
+        notes = self.metadata.get(current_image_name, {'notes': ''})['notes']
         reply = tkinter.simpledialog.askstring('Notes', '', initialvalue=notes)
 
         # If the user replied, update the notes
         if reply:
-            if current_image_path not in self.metadata:
-                self.metadata[current_image_path] = {'rating': '0'}
-            self.metadata[current_image_path]['notes'] = reply
+            if current_image_name not in self.metadata:
+                self.metadata[current_image_name] = {'rating': '0'}
+            self.metadata[current_image_name]['notes'] = reply
 
             # If the EDIT data is visible, toggle to redraw it all
             if self.show_histogram:
@@ -392,7 +393,8 @@ class Viewer():
         # Now add EXIF info if there is any. We cheat a bit here and add our own
         # rating and notes as EXIF tags
         exif_info = self.get_exif_info(pil_image)
-        metadata = self.metadata.get(image_path, {'rating': '0', 'notes': ''})
+        image_name = os.path.basename(image_path)
+        metadata = self.metadata.get(image_name, {'rating': '0', 'notes': ''})
         rating = metadata['rating']
         notes = metadata['notes']
         if rating != '0':
@@ -548,6 +550,9 @@ class Viewer():
                 rows = csv.reader(db)
 
                 for image, rating, notes in rows:
+                    # To allow us to relocate the date, only use the
+                    # basename until we support subtrees
+                    image = os.path.basename(image)
                     self.metadata[image]= {'rating': rating, 'notes': notes}
 
     def save_metadata(self):
@@ -558,7 +563,10 @@ class Viewer():
             metadata_db = os.path.join(self.path, 'metadata.csv')
             with open(metadata_db, 'w', newline='') as db:
                 for image in self.metadata.keys():
-                    # We put the rating first in case the path contains spaces
+
+                    # Only use base name so we can relocate the data
+                    image = os.path.basename(image)
+                    # We put the rating first in case the notes contains spaces
                     writer = csv.writer(db)
                     writer.writerow([image, self.metadata[image]['rating'], self.metadata[image]['notes']])
 
