@@ -96,7 +96,7 @@ class Viewer():
         self.canvas_image = None
         debug('Viewer constructed')
 
-    def goto_image(self, index):
+    def goto_image(self, index, delta=1):
         '''
         Go to the image in the list, wrapping at the ends. If there are no
         images, do nothing
@@ -112,8 +112,8 @@ class Viewer():
                     rating = '0' if not in_metadata else self.metadata[image_name]['rating']
                     if rating >= self.filter:
                         break
-                    print(f'skip image {self.image_index} in metadata {in_metadata} rating {rating}')
-                    self.image_index = (self.image_index+1) % len(self.images)
+                    debug(f'skip image {self.image_index} in metadata {in_metadata} rating {rating}')
+                    self.image_index = (self.image_index+delta) % len(self.images)
 
             self.load_image()
 
@@ -152,7 +152,7 @@ class Viewer():
     def on_left(self, _):
         '''Go to the previous image, wrapping at the start'''
         debug('left')
-        self.goto_image(self.image_index - 1)
+        self.goto_image(self.image_index - 1, delta=-1)
 
     def on_right(self, _):
         '''Go to the next image, wrapping at the end'''
