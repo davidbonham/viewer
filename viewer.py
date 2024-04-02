@@ -1,5 +1,6 @@
 import argparse
 import csv
+import datetime
 import fractions
 import os
 import random
@@ -8,6 +9,8 @@ import sys
 import tkinter
 from tkinter import font as tkFont
 import tkinter.simpledialog
+from typing import List
+
 import PIL
 from PIL import Image, ImageTk, ExifTags
 
@@ -28,9 +31,22 @@ def debug(record):
         print(record)
 
 
+def treewalk(rootpath: str, wanted_types: List[str]) -> List[str]:
+    def wanted(p: str):
+        return any([p.endswith(suffix) for suffix in wanted_types])
+
+    result: List[str] = []
+    for root, dirs, files in os.walk(rootpath):
+        wanted_files: List[str] = [file for file in files if wanted(file)]
+        wanted_paths: List[str] = [os.path.join(root, file) for file in wanted_files]
+        result.extend(wanted_paths)
+
+    return result
+
+
 class Viewer():
 
-    def __init__(self, master, width=None, height=None, bare=False, bell=False, sort=False, randomise=False, filter=None, path=None):
+    def __init__(self, master, width=None, height=None, bare=False, bell=False, sort=False, randomise=False, treewalk=False, filter=None, path=None):
 
         self.image_index = None      # Index of the current image
         self.images = []             # The paths of images we know about
@@ -48,17 +64,16 @@ class Viewer():
         self.centre_image = False    # Don't centre the image
         self.sort_on_load = sort     # Sort images on loading
         self.randomise_on_load = randomise     # Shuffle images on loading
+        self.update = True           # Update current image when one arrives
         self.path = path
         self.load_metadata()
         self.filter = filter
+        self.treewalk = treewalk
 
-
-
-        #Remove window manager decoration and processing of 'X' button
-        #closing processing &c
+        # Remove window manager decoration and processing of 'X' button
+        # closing processing &c
         if bare:
             self.master.attributes('-fullscreen', True)
-            #self.master.overrideredirect(1)
 
 
         # Set ourselves up as a full screen window unless the caller
@@ -82,6 +97,7 @@ class Viewer():
         master.bind('c', self.on_centre)
         master.bind('e', self.on_histogram)
         master.bind('t', self.on_text)
+        master.bind('u', self.on_update)
         master.bind('x', self.on_clearskip)
         for rating in range(10):
             master.bind(str(rating), self.on_rating)
@@ -193,6 +209,11 @@ class Viewer():
     def on_filter(self, info):
         self.filter = chr(ord('0') + ')!".$%^&*('.find(info.char))
         debug(f'on_rating \'{info.char}\' sets rating filter \'{self.filter}\'')
+
+    def on_update(self,_):
+        self.update = not self.update
+        debug(f'on_update sets updating {self.update}')
+        self.updater()
 
 
     def on_text(self, _):
@@ -402,6 +423,7 @@ class Viewer():
         if notes != '':
             exif_info['Notes'] = notes
         exif_info['Name'] = os.path.basename(image_path)
+        exif_info['Time'] = f'{datetime.datetime.now():%H:%M:%S}'
 
         if len(exif_info) > 0:
 
@@ -490,6 +512,8 @@ class Viewer():
     def updater(self):
         '''Called regularly to see if new images have appeared on disk'''
 
+        if not self.update: return
+
         if self.rescan:
             debug('rescan')
             # We've been asked to rescan the directory - perhaps a file disappeared
@@ -498,7 +522,11 @@ class Viewer():
             self.rescan = False
 
         # All of the files in the hot directory that end in .jpg
-        paths = [os.path.join(self.path, file) for file in os.listdir(self.path) if file.lower().endswith('.jpg') or file.lower().endswith('.jpeg')]
+        if self.treewalk:
+            paths = treewalk(self.path, ['.jpeg', '.jpg'])
+        else:
+            # Simple way to collect our images
+            paths = [os.path.join(self.path, file) for file in os.listdir(self.path) if file.lower().endswith('.jpg') or file.lower().endswith('.jpeg')]
 
         # Images that have appeared since we last looked, ignoring the corrupt
         # ones we already know about
@@ -588,6 +616,7 @@ navigation keys:
   c                Toggle centring of images
   e                Toggle display of the histogram and EXIF info
   x                Clear the list of images being skipped because we failed to load them
+  u                Toggle automatic updating
   0,1,...9         Rate the current image
 '''
 
@@ -603,6 +632,7 @@ navigation keys:
     parser.add_argument('--sort', action='store_true', help='Sort images into alphabetical order')
     parser.add_argument('--debug', action='store_true', help='Print debug info to standard output')
     parser.add_argument('--randomise', action='store_true', help='Randomise the initial order')
+    parser.add_argument('--treewalk', action='store_true', help='Include subdirectories in the scan')
     parser.add_argument('--filter', type=str, help='Set the minimum rating to display')
 
     parser.add_argument('directory', help='Path to hot folder')
@@ -610,7 +640,11 @@ navigation keys:
 
     debugging = args.debug
     tk = tkinter.Tk()
-    app = Viewer(master=tk, width=args.width, height=args.height, bare=args.bare, bell=args.bell, sort=args.sort, randomise=args.randomise, filter=args.filter,path=args.directory)
+    app = Viewer(master=tk, width=args.width, height=args.height,
+                 bare=args.bare, bell=args.bell,
+                 sort=args.sort, randomise=args.randomise, treewalk=args.treewalk,
+                 filter=args.filter,
+                 path=args.directory)
     tk.after(10, app.updater)
     tk.mainloop()
 
