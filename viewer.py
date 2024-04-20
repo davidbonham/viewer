@@ -6,6 +6,7 @@ import os
 import random
 import statistics
 import sys
+import textwrap
 import tkinter
 from tkinter import font as tkFont
 import tkinter.simpledialog
@@ -65,6 +66,7 @@ class Viewer():
         self.sort_on_load = sort     # Sort images on loading
         self.randomise_on_load = randomise     # Shuffle images on loading
         self.update = True           # Update current image when one arrives
+        self.info = False            # Don't display info from Exif and current status
         self.path = path
         self.load_metadata()
         self.filter = filter
@@ -99,6 +101,8 @@ class Viewer():
         master.bind('t', self.on_text)
         master.bind('u', self.on_update)
         master.bind('x', self.on_clearskip)
+        master.bind('i', self.on_info)
+
         for rating in range(10):
             master.bind(str(rating), self.on_rating)
         for filter in '!".$%^&*()':
@@ -215,6 +219,10 @@ class Viewer():
         debug(f'on_update sets updating {self.update}')
         self.updater()
 
+    def on_info(self, _):
+        self.info = not self.info
+        debug(f'on_info sets info display {self.info}')
+        self.updater()
 
     def on_text(self, _):
 
@@ -278,9 +286,9 @@ class Viewer():
             'ExposureProgram': 'Program',
             'ISOSpeedRatings': 'ISO',
             'ExposureMode': 'Exposure Mode',
-            'LensModel': 'Lens'
-
+            'LensModel': 'Lens',
         }
+
         wanted_tags = {key: public_name[name] for key, name in ExifTags.TAGS.items() if name in (
             'ExposureBiasValue',
             'ExposureTime',
@@ -293,6 +301,9 @@ class Viewer():
             'LensModel',
         )}
 
+        # Add wanted items that are not in the Exif tags dictionary
+        wanted_tags[37510] = 'User Comment'
+
         # For every tag in the ifd data which is in our TAGS dictionary,
         # place it's name and value in our results
         ifd_tags = {wanted_tags[tag]: value for tag, value in ifd_data.items() if tag in wanted_tags}
@@ -303,6 +314,7 @@ class Viewer():
         if 'Exposure Time' in result:
             rational = result['Exposure Time']
             if rational < 1:
+                # Not necessarily in lowest terms
                 # Not necessarily in lowest terms
                 fraction = fractions.Fraction(rational.numerator, rational.denominator)
                 result['Exposure Time'] = f'{fraction.numerator}/{fraction.denominator} sec'
@@ -364,6 +376,22 @@ class Viewer():
                 2 : 'Auto bracket'
             }.get(result['Exposure Mode'], 'Undefined')
 
+        # If there is a TIFF UserComment attribute (37510), decode it
+        if 'User Comment' in result:
+            raw_comment = result['User Comment']
+            # The first eight bytes are the encoding. We expect this to be utf-16 at the moment or else we ignore it.
+            # to vary depending on the tool that wrote it and they don't seem to write a BOM.
+            encoding = raw_comment[:8]
+            data = raw_comment[8:]
+            debug(f'user comment detected with encoding {encoding}')
+            if encoding == b'UNICODE\x00':
+                # We need the endianness :
+                utf16_order = 'utf-16be' if exif_data.endian == '>' else 'utf-16le'
+                decoded_data = data.decode(utf16_order)
+                result['User Comment'] = decoded_data
+            else:
+                # Assume this is ascii
+                result['User Comment'] = data.decode('ascii')
         return result
 
 
@@ -440,6 +468,15 @@ class Viewer():
                 del exif_info['Lens']
             if 'Aperture' in exif_info and 'Exposure Time' in exif_info and 'ISO' in exif_info:
                 text += f'{exif_info["Exposure Time"]} at {exif_info["Aperture"]}, ISO {exif_info["ISO"]}\n'
+
+            if 'User Comment' in exif_info:
+                if self.info:
+                    # The comment will be long so wrap it into multiple lines
+                    comments = textwrap.wrap(exif_info['User Comment'], 60)
+                    text += '\n'.join(comments)
+                del exif_info['User Comment']
+
+
             text += '\n'
 
             # The width of the longest remaining label so we can pad them
