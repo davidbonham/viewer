@@ -13,7 +13,7 @@ import tkinter.simpledialog
 from typing import List
 
 import PIL
-from PIL import Image, ImageTk, ExifTags
+from PIL import Image, ImageTk, ExifTags, ImageOps
 
 # The Python Imaging Library (PIL) is
 #
@@ -502,6 +502,8 @@ class Viewer():
         try:
             pil_image = Image.open(path, 'r')
             pil_image.load()
+            ImageOps.exif_transpose(pil_image, in_place=True)
+
         except (PIL.UnidentifiedImageError, FileNotFoundError, OSError) as e:
             #if isinstance(e, FileNotFoundError):
                 #print(f'image {path} missing - rescanning directory', file=sys.stderr)
@@ -677,6 +679,7 @@ navigation keys:
 
     debugging = args.debug
     tk = tkinter.Tk()
+
     app = Viewer(master=tk, width=args.width, height=args.height,
                  bare=args.bare, bell=args.bell,
                  sort=args.sort, randomise=args.randomise, treewalk=args.treewalk,
